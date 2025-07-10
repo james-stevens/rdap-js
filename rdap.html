@@ -1,0 +1,141 @@
+<html>
+
+<script language=javascript>
+var debugAPI = false;
+var bootstrap = {};
+var errtag = null;
+var jsondump = null;
+var friendlyHttpStatus = {
+    200: 'OK',
+    201: 'Created',
+    202: 'Accepted',
+    203: 'Non-Authoritative Information',
+    204: 'No Content',
+    205: 'Reset Content',
+    206: 'Partial Content',
+    300: 'Multiple Choices',
+    301: 'Moved Permanently',
+    302: 'Found',
+    303: 'See Other',
+    304: 'Not Modified',
+    305: 'Use Proxy',
+    306: 'Unused',
+    307: 'Temporary Redirect',
+    400: 'Bad Request',
+    401: 'Unauthorized',
+    402: 'Payment Required',
+    403: 'Forbidden',
+    404: 'Not Found',
+    405: 'Method Not Allowed',
+    406: 'Not Acceptable',
+    407: 'Proxy Authentication Required',
+    408: 'Request Timeout',
+    409: 'Conflict',
+    410: 'Gone',
+    411: 'Length Required',
+    412: 'Precondition Required',
+    413: 'Request Entry Too Large',
+    414: 'Request-URI Too Long',
+    415: 'Unsupported Media Type',
+    416: 'Requested Range Not Satisfiable',
+    417: 'Expectation Failed',
+    418: 'I\'m a teapot',
+    429: 'Too Many Requests',
+    500: 'Internal Server Error',
+    501: 'Not Implemented',
+    502: 'Bad Gateway',
+    503: 'Service Unavailable',
+    504: 'Gateway Timeout',
+    505: 'HTTP Version Not Supported',
+};
+
+
+
+function callApi(url,callback)
+{
+	document.body.style.cursor="progress";
+
+	if (debugAPI) {
+		console.log("API>>>",url);
+		}
+
+	let okResp = 200;
+	let httpCmd = {
+		headers: { 'Accept':'application/rdap+json' },
+		method: 'GET',
+		};
+
+	try {
+		fetch(url,httpCmd).then(response => {
+			if (debugAPI) console.log("API-Resp>>>",response);
+			if (response.status != okResp) {
+				let msg = response.statusText;
+				if ((!msg)&&(response.status in friendlyHttpStatus)) msg = friendlyHttpStatus[response.status];
+				return errMsg(`ERROR: ${response.status} - ${msg}`)
+				}
+
+			response.text().then(data => {
+				let param = data;
+				try {
+					param = JSON.parse(data); }
+				catch {
+					param = data; }
+				if (callback) callback(param); else console.log(param);
+				});
+
+			}).catch(err => errMsg(`ERROR: Failed to fetch ${url}`));
+		} catch { errMsg(`ERROR: Failed to fetch ${url}`); }
+
+	document.body.style.cursor="auto";
+}
+
+
+
+function errMsg(msg)
+{
+	errtag.innerHTML = msg;
+}
+
+
+function runRDAP()
+{
+	errMsg("Fetching ...");
+	jsondump.innerHTML = "";
+
+	let fqdn = document.rdapform.fqdn.value;
+	let labels = fqdn.split(".");
+
+	if (labels.length < 2) return errMsg("Invalid domain name");
+	tld = labels[labels.length - 1];
+	if (!(tld in bootstrap)) return errMsg(`No bootstrap found for TLD '${tld}'`);
+
+	callApi(bootstrap[tld][0]+"domain/"+fqdn,(data)=>{
+		errMsg("");
+		jsondump.innerHTML = `<xmp>${JSON.stringify(data,null,2)}</xmp>`
+		});
+}
+
+
+function startUp()
+{
+	errtag = document.getElementById("errTag");
+	jsondump = document.getElementById("jsonDump");
+
+	callApi("https://data.iana.org/rdap/dns.json",(data) => {
+		if (!((data)||(data.services))) return errMsg("Failed to read bootstrap 'dns.json'");
+		for(let i of data.services) {
+			for (let tld of i[0]) bootstrap[tld] = i[1];
+			}
+		});
+}
+
+
+</script>
+<body onLoad="startUp();">
+<table><tr>
+<td><form name="rdapform" onSubmit="runRDAP(); return false;"><input autofocus name=fqdn><input type=submit value="Run RDAP"></form></td>
+<td><div id="errTag"></div></td>
+</tr></table>
+<div style="width:100%" id="jsonDump"></div>
+</body>
+</html>
